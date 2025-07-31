@@ -1,109 +1,259 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
+# ═══════════════════════════════════════════════════════════════════════════════
+# TELA DE ALUGUEL E DEVOLUÇÃO DE CAÇAMBAS - VISUAL MODERNO
+# ═══════════════════════════════════════════════════════════════════════════════
+
+import customtkinter as ctk
+from tkinter import messagebox
 from datetime import datetime
 from sqlalchemy.orm import joinedload
-from ..database import SessionLocal
-from ..models import Cliente, Cacamba, Aluguel
 
-def abrir_tela_aluguel():
-    janela = tk.Toplevel()
-    janela.title("Registrar Aluguel")
-    janela.geometry("450x400")
+from app.database import SessionLocal
+from app.models import Cliente, Cacamba, Aluguel
 
-    db = SessionLocal()
 
-    # Busca clientes e caçambas disponíveis
-    clientes = db.query(Cliente).all()
-    cacambas = db.query(Cacamba).filter_by(disponivel=True).all()
+# ═══════════════════════════════════════════════════════════════════════════════
+# TELA: NOVO ALUGUEL
+# ═══════════════════════════════════════════════════════════════════════════════
 
-    db.close()
+def construir_tela_aluguel(pai: ctk.CTkFrame) -> ctk.CTkFrame:
+    frame = ctk.CTkFrame(pai, corner_radius=15)
+    frame.grid_rowconfigure(tuple(range(30)), weight=0)
+    frame.grid_columnconfigure(0, weight=1)
 
-    # Widgets
-    ttk.Label(janela, text="Cliente:").pack()
-    combo_cliente = ttk.Combobox(janela, values=[f"{c.id} - {c.nome}" for c in clientes])
-    combo_cliente.pack()
+    # Título
+    ctk.CTkLabel(
+        frame,
+        text="📄 Registrar Novo Aluguel",
+        font=("Segoe UI", 22, "bold")
+    ).grid(row=0, column=0, pady=(20, 10))
 
-    ttk.Label(janela, text="Caçamba:").pack()
-    combo_cacamba = ttk.Combobox(janela, values=[f"{c.id} - {c.identificacao}" for c in cacambas])
-    combo_cacamba.pack()
+    # Cliente
+    ctk.CTkLabel(frame, text="👤 Cliente:", font=("Segoe UI", 14)).grid(row=1, column=0, pady=(5, 0))
+    combo_cliente = ctk.CTkOptionMenu(frame, width=350, values=[])
+    combo_cliente.grid(row=2, column=0, pady=5)
 
-    ttk.Label(janela, text="Data de Fim (dd/mm/aaaa):").pack()
-    entry_data_fim = ttk.Entry(janela)
-    entry_data_fim.pack()
+    # Caçamba
+    ctk.CTkLabel(frame, text="🚛 Caçamba disponível:", font=("Segoe UI", 14)).grid(row=3, column=0, pady=(10, 0))
+    combo_cacamba = ctk.CTkOptionMenu(frame, width=350, values=[])
+    combo_cacamba.grid(row=4, column=0, pady=5)
 
-    def registrar_aluguel():
+    # Data de início
+    ctk.CTkLabel(frame, text="📅 Data de Início (dd/mm/aaaa):", font=("Segoe UI", 14)).grid(row=5, column=0, pady=(10, 0))
+    entry_inicio = ctk.CTkEntry(frame, width=350, placeholder_text="Ex: 10/07/2025")
+    entry_inicio.grid(row=6, column=0, pady=5)
+
+    # Data de fim
+    ctk.CTkLabel(frame, text="📅 Data de Fim (dd/mm/aaaa):", font=("Segoe UI", 14)).grid(row=7, column=0, pady=(10, 0))
+    entry_fim = ctk.CTkEntry(frame, width=350, placeholder_text="Ex: 15/07/2025")
+    entry_fim.grid(row=8, column=0, pady=5)
+
+    # Endereço da Obra
+    ctk.CTkLabel(frame, text="📍 Endereço da Obra:", font=("Segoe UI", 14)).grid(row=9, column=0, pady=(10, 0))
+    entry_endereco = ctk.CTkEntry(frame, width=350, placeholder_text="Ex: Rua A, nº 123 - Bairro X")
+    entry_endereco.grid(row=10, column=0, pady=5)
+
+    # Valor do aluguel
+    ctk.CTkLabel(frame, text="💲 Valor do aluguel (R$):", font=("Segoe UI", 14)).grid(row=11, column=0, pady=(10, 0))
+    entry_valor = ctk.CTkEntry(frame, width=350, placeholder_text="Ex: 450.00")
+    entry_valor.grid(row=12, column=0, pady=5)
+
+    # Função atualizar
+    def atualizar_listas(combo_cliente_widget, combo_cacamba_widget):
+        with SessionLocal() as db:
+            clientes = db.query(Cliente).all()
+            cacambas = db.query(Cacamba).filter_by(disponivel=True).all()
+
+        valores_clientes = [f"{c.id} - {c.nome}" for c in clientes] or ["Nenhum cliente encontrado"]
+        valores_cacambas = [f"{c.id} - {c.identificacao}" for c in cacambas] or ["Nenhuma disponível"]
+
+        combo_cliente_widget.configure(values=valores_clientes)
+        combo_cacamba_widget.configure(values=valores_cacambas)
+
+        combo_cliente_widget.set(valores_clientes[0] if valores_clientes else "")
+        combo_cacamba_widget.set(valores_cacambas[0] if valores_cacambas else "")
+
+    atualizar_listas(combo_cliente, combo_cacamba)
+
+    # Função salvar
+    def salvar_aluguel():
         try:
             cliente_id = int(combo_cliente.get().split(" - ")[0])
             cacamba_id = int(combo_cacamba.get().split(" - ")[0])
-            data_fim_str = entry_data_fim.get()
-            data_fim = datetime.strptime(data_fim_str, "%d/%m/%Y")
+            data_inicio = datetime.strptime(entry_inicio.get(), "%d/%m/%Y")
+            data_fim = datetime.strptime(entry_fim.get(), "%d/%m/%Y")
+            valor = float(entry_valor.get().replace(",", "."))
 
-            db = SessionLocal()
+            if data_fim <= data_inicio:
+                messagebox.showerror("Erro", "A data de fim deve ser posterior à data de início.")
+                return
 
-            novo_aluguel = Aluguel(
-                cliente_id=cliente_id,
-                cacamba_id=cacamba_id,
-                data_fim=data_fim
+            endereco_obra = entry_endereco.get().strip()
+            if not endereco_obra:
+                messagebox.showerror("Erro", "Informe o endereço da obra.")
+                return
+
+            with SessionLocal() as db:
+                aluguel = Aluguel(
+                    cliente_id=cliente_id,
+                    cacamba_id=cacamba_id,
+                    data_inicio=data_inicio,
+                    data_fim=data_fim,
+                    valor=valor,
+                    endereco_obra=endereco_obra
+                )
+                db.add(aluguel)
+                cacamba = db.query(Cacamba).get(cacamba_id)
+                cacamba.disponivel = False
+                db.commit()
+
+            combo_cliente.set("")
+            combo_cacamba.set("")
+            entry_inicio.delete(0, "end")
+            entry_fim.delete(0, "end")
+            entry_valor.delete(0, "end")
+            entry_endereco.delete(0, "end")
+
+            messagebox.showinfo("Sucesso", "Aluguel registrado com sucesso!")
+
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao registrar aluguel:\n{e}")
+
+    # Botão salvar
+    ctk.CTkButton(
+        frame,
+        text="💾 Salvar Aluguel",
+        command=salvar_aluguel,
+        fg_color="#228B22",
+        hover_color="#1E6F1E",
+        font=("Segoe UI", 14, "bold"),
+        width=200,
+        height=40
+    ).grid(row=13, column=0, pady=(20, 5))
+
+    # Botão atualizar
+    ctk.CTkButton(
+        frame,
+        text="🔄 Atualizar Caçambas",
+        command=lambda: atualizar_listas(combo_cliente, combo_cacamba),
+        fg_color="#1E90FF",
+        hover_color="#1C86EE",
+        font=("Segoe UI", 12, "bold"),
+        width=200,
+        height=30
+    ).grid(row=14, column=0, pady=(5, 30))
+
+    return frame
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TELA: REGISTRAR DEVOLUÇÃO
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def construir_tela_devolucao(pai: ctk.CTkFrame) -> ctk.CTkFrame:
+    frame = ctk.CTkFrame(pai, corner_radius=16)
+    frame.grid_rowconfigure((0, 1, 2, 3, 4, 5, 6), weight=0)
+    frame.grid_columnconfigure(0, weight=1)
+
+    # ─── Título ─────────────────────────────────────
+    ctk.CTkLabel(
+        frame,
+        text="↩️ Devolução de Caçambas",
+        font=("Segoe UI", 26, "bold"),
+        text_color="#111827"
+    ).grid(row=0, column=0, pady=(30, 10), sticky="n")
+
+    # ─── Subtítulo ─────────────────────────────────
+    ctk.CTkLabel(
+        frame,
+        text="Selecione um aluguel ativo para confirmar a devolução:",
+        font=("Segoe UI", 15),
+        text_color="#374151"
+    ).grid(row=1, column=0, pady=(0, 20), sticky="n")
+
+    # ─── Combo de Aluguéis ─────────────────────────
+    combo_var = ctk.StringVar()
+    combo = ctk.CTkOptionMenu(frame, variable=combo_var, values=[], width=460)
+    combo.grid(row=2, column=0, pady=(0, 10))
+
+    # ─── Status da Operação ────────────────────────
+    status_label = ctk.CTkLabel(frame, text="", font=("Segoe UI", 13))
+    status_label.grid(row=3, column=0, pady=(5, 10))
+
+    # ─── Atualizar Lista ───────────────────────────
+    def atualizar_lista_alugueis():
+        with SessionLocal() as db:
+            alugueis = (
+                db.query(Aluguel)
+                .filter_by(encerrado=False)
+                .options(joinedload(Aluguel.cliente), joinedload(Aluguel.cacamba))
+                .order_by(Aluguel.data_fim.asc())
+                .all()
             )
-            db.add(novo_aluguel)
 
-            # Marca a caçamba como indisponível
-            cacamba = db.query(Cacamba).filter_by(id=cacamba_id).first()
-            cacamba.disponivel = False
+        opcoes = [
+            f"{a.id} - {a.cliente.nome} | {a.cacamba.identificacao} | Até: {a.data_fim.strftime('%d/%m/%Y')}"
+            for a in alugueis
+        ] or ["Nenhum aluguel ativo disponível"]
 
-            db.commit()
-            db.close()
+        combo.configure(values=opcoes)
+        combo.set(opcoes[0])
 
-            messagebox.showinfo("Sucesso", "Aluguel registrado!")
-            janela.destroy()
+    atualizar_lista_alugueis()
 
-        except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao registrar aluguel: {e}")
+    # ─── Animação de status ────────────────────────
+    def animar_status(msg, cor):
+        status_label.configure(text=msg, text_color=cor)
+        frame.after(3000, lambda: status_label.configure(text=""))
 
-    ttk.Button(janela, text="Salvar Aluguel", command=registrar_aluguel).pack(pady=20)
-
-def abrir_tela_devolucao():
-    janela = tk.Toplevel()
-    janela.title("Registrar Devolução")
-    janela.geometry("500x400")
-
-    db = SessionLocal()
-
-    # Busca aluguéis ativos com join de cliente e caçamba
-    alugueis = db.query(Aluguel).filter_by(encerrado=False)\
-        .options(joinedload(Aluguel.cliente), joinedload(Aluguel.cacamba)).all()
-
-    db.close()
-
-    # Lista amigável para exibição
-    lista_exibicao = []
-    for a in alugueis:
-        nome_cliente = a.cliente.nome
-        id_cacamba = a.cacamba.identificacao
-        fim = a.data_fim.strftime('%d/%m/%Y')
-        lista_exibicao.append(f"{a.id} - {nome_cliente} - Caçamba {id_cacamba} - Devolução: {fim}")
-
-    ttk.Label(janela, text="Selecione um aluguel para devolver:").pack()
-    combo = ttk.Combobox(janela, values=lista_exibicao, width=60)
-    combo.pack(pady=10)
-
+    # ─── Confirmar Devolução ───────────────────────
     def confirmar_devolucao():
+        selecao = combo.get()
+        if "Nenhum" in selecao:
+            animar_status("❌ Nenhum aluguel selecionado", "#dc2626")
+            return
+
         try:
-            aluguel_id = int(combo.get().split(" - ")[0])
+            aluguel_id = int(selecao.split(" - ")[0])
 
-            db = SessionLocal()
-            aluguel = db.query(Aluguel).filter_by(id=aluguel_id).first()
-            aluguel.encerrado = True
+            with SessionLocal() as db:
+                aluguel = db.query(Aluguel).get(aluguel_id)
+                aluguel.encerrado = True
+                cacamba = db.query(Cacamba).get(aluguel.cacamba_id)
+                cacamba.disponivel = True
+                db.commit()
 
-            caçamba = db.query(Cacamba).filter_by(id=aluguel.cacamba_id).first()
-            caçamba.disponivel = True
+            animar_status("✅ Devolução registrada com sucesso!", "#22c55e")
+            atualizar_lista_alugueis()
 
-            db.commit()
-            db.close()
-
-            messagebox.showinfo("Sucesso", "Devolução registrada com sucesso!")
-            janela.destroy()
         except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao processar devolução: {e}")
+            messagebox.showerror("Erro", f"Ocorreu um erro: {e}")
+            animar_status("❌ Falha ao processar devolução.", "#dc2626")
 
-    ttk.Button(janela, text="Registrar Devolução", command=confirmar_devolucao).pack(pady=20)
+    # ─── Botão Confirmar ───────────────────────────
+    ctk.CTkButton(
+        frame,
+        text="✅ Confirmar Devolução",
+        command=confirmar_devolucao,
+        font=("Segoe UI", 14, "bold"),
+        width=240,
+        height=42,
+        fg_color="#2563EB",
+        hover_color="#1D4ED8",
+        text_color="white",
+        corner_radius=12
+    ).grid(row=4, column=0, pady=(10, 5))
+
+    # ─── Botão Atualizar ───────────────────────────
+    ctk.CTkButton(
+        frame,
+        text="🔄 Atualizar Lista",
+        command=atualizar_lista_alugueis,
+        font=("Segoe UI", 12, "bold"),
+        width=200,
+        height=36,
+        fg_color="#9CA3AF",
+        hover_color="#6B7280",
+        corner_radius=10
+    ).grid(row=5, column=0, pady=(0, 30))
+
+    return frame

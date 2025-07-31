@@ -1,49 +1,118 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
-from sqlalchemy.exc import SQLAlchemyError
-from ..database import SessionLocal
-from ..models import Cacamba
+from app.controllers.cacamba import registrar_cacamba
+import customtkinter as ctk
 
-def abrir_tela_cacamba():
-    janela = tk.Toplevel()
-    janela.title("Gerenciar Caçambas")
-    janela.geometry("400x300")
+class TelaCacamba(ctk.CTkFrame):
+    def __init__(self, master):
+        super().__init__(master)
+        self.configure(fg_color="#F9FAFB")
+        self.grid(row=0, column=0, sticky="nsew")
 
-    # Campos
-    ttk.Label(janela, text="Identificação:").pack()
-    entry_id = ttk.Entry(janela)
-    entry_id.pack()
+        # Responsividade da janela principal
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
 
-    ttk.Label(janela, text="Localização atual:").pack()
-    entry_local = ttk.Entry(janela)
-    entry_local.pack()
+        # Frame central com tamanho fixo para manter alinhamento
+        self.conteudo = ctk.CTkFrame(self, fg_color="white", corner_radius=12)
+        self.conteudo.place(relx=0.5, rely=0.5, anchor="center")  # 100% centralizado
 
-    var_disponivel = tk.BooleanVar(value=True)
-    chk_disponivel = ttk.Checkbutton(janela, text="Disponível", variable=var_disponivel)
-    chk_disponivel.pack(pady=5)
+        self.build()
 
-    def salvar_cacamba():
-        identificacao = entry_id.get()
-        localizacao = entry_local.get()
-        disponivel = var_disponivel.get()
+    def build(self):
+        # Título
+        titulo = ctk.CTkLabel(
+            self.conteudo,
+            text="📦 Cadastro de Caçamba",
+            font=("Segoe UI", 22, "bold"),
+            text_color="#111827"
+        )
+        titulo.pack(pady=(10, 30))
 
-        if not identificacao.strip():
-            messagebox.showerror("Erro", "A identificação é obrigatória.")
-            return
+        # Label Identificação
+        self.label_ident = ctk.CTkLabel(
+            self.conteudo,
+            text="Identificação:",
+            font=("Segoe UI", 14),
+            text_color="#374151"
+        )
+        self.label_ident.pack(pady=(5, 2))
 
-        try:
-            db = SessionLocal()
-            nova = Cacamba(
-                identificacao=identificacao,
-                localizacao_atual=localizacao,
-                disponivel=disponivel
+        # Entry Identificação
+        self.entry_ident = ctk.CTkEntry(
+            self.conteudo,
+            justify="center",
+            width=220,
+            font=("Segoe UI", 12)
+        )
+        self.entry_ident.pack(pady=(0, 20))
+
+        # Label Localização
+        self.label_loc = ctk.CTkLabel(
+            self.conteudo,
+            text="Localização:",
+            font=("Segoe UI", 14),
+            text_color="#374151"
+        )
+        self.label_loc.pack(pady=(5, 2))
+
+        # Entry Localização
+        self.entry_loc = ctk.CTkEntry(
+            self.conteudo,
+            justify="center",
+            width=300,
+            font=("Segoe UI", 12)
+        )
+        self.entry_loc.pack(pady=(0, 20))
+
+        # Botão Salvar
+        self.btn_salvar = ctk.CTkButton(
+            self.conteudo,
+            text="💾 Salvar Caçamba",
+            font=("Segoe UI", 13, "bold"),
+            height=40,
+            width=300,
+            fg_color="#2563EB",
+            hover_color="#1E40AF",
+            corner_radius=8,
+            text_color="white",
+            command=self.salvar_e_atualizar
+        )
+        self.btn_salvar.pack(pady=(10, 15))
+
+        # Feedback centralizado
+        self.feedback_label = ctk.CTkLabel(
+            self.conteudo,
+            text="",
+            font=("Segoe UI", 13, "bold"),
+            anchor="center",
+            justify="center",
+            text_color="#111827"
+        )
+        self.feedback_label.pack(pady=(5, 15))
+
+    def salvar_e_atualizar(self):
+        identificacao = self.entry_ident.get().strip()
+        localizacao = self.entry_loc.get().strip()
+
+        if identificacao and localizacao:
+            sucesso = registrar_cacamba(identificacao, localizacao)
+            if sucesso:
+                self.feedback_label.configure(
+                    text="✅ Caçamba cadastrada com sucesso!",
+                    text_color="#059669"
+                )
+                self.entry_ident.delete(0, "end")
+                self.entry_loc.delete(0, "end")
+            else:
+                self.feedback_label.configure(
+                    text="❌ Erro ao cadastrar caçamba!",
+                    text_color="#DC2626"
+                )
+        else:
+            self.feedback_label.configure(
+                text="⚠️ Preencha todos os campos antes de salvar.",
+                text_color="#D97706"
             )
-            db.add(nova)
-            db.commit()
-            db.close()
-            messagebox.showinfo("Sucesso", "Caçamba cadastrada com sucesso!")
-            janela.destroy()
-        except SQLAlchemyError as e:
-            messagebox.showerror("Erro", f"Erro ao salvar no banco: {e}")
 
-    ttk.Button(janela, text="Salvar", command=salvar_cacamba).pack(pady=10)
+# ✅ Função construtora para uso no main.py
+def construir_tela_cacamba(master):
+    return TelaCacamba(master)
